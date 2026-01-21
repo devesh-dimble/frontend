@@ -27,6 +27,16 @@
               {
                 "glob": "**/*",
                 "input": "public"
+              },
+              {
+                "glob": "**/*.wasm",
+                "input": "node_modules/web-ifc",
+                "output": "assets/wasm"
+              },
+              {
+                "glob": "BW_6533630.ifc",
+                "input": ".",
+                "output": "."
               }
             ],
             "styles": [
