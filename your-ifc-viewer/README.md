@@ -41,7 +41,7 @@ npm install
 ## Usage
 
 1. Run `npm run dev` and open the URL in your browser.
-2. **Demo** – Loads the bundled sample IFC (`public/Vahrendorfer-Stadtweg_4.ifc`).
+2. **Demo** – Loads the bundled sample IFC (`public/2026-02-10_teilmodell_Vahrendorfer_Sensoren.ifc`).
 3. **Load IFC** – Opens a file picker; choose a `.ifc` file to load it into the viewer.
 4. **Export fragments** – Exports the first loaded model as `model.frag` and `model.json` (if properties exist).
 5. **Dispose** – Clears all loaded fragments and frees resources.
@@ -52,7 +52,7 @@ npm install
 ```
 your-ifc-viewer/
 ├── public/
-│   └── Vahrendorfer-Stadtweg_4.ifc   # Demo IFC model
+│   └── 2026-02-10_teilmodell_Vahrendorfer_Sensoren.ifc   # Demo IFC model
 ├── src/
 │   ├── main.ts                       # App entry: world, loader, UI, handlers
 │   └── style.css                    # Global styles
