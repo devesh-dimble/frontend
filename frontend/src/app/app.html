@@ -1,0 +1,604 @@
+<div class="app-container">
+  <!-- Header Area - 10% height, 100% width -->
+  <header class="header">
+    <div class="header-brand">
+      <span class="logo">◈</span>
+      <h1>BCF Issues</h1>
+    </div>
+    <nav class="header-nav"></nav>
+    <div class="header-actions">
+      @if (isAuthenticated()) {
+        <div class="user-info">
+          <span class="user-name">{{ currentUser()?.userName }}</span>
+          @if (selectedProject()) {
+            <button class="project-btn" (click)="openProjectSelector()" title="Change project">
+              {{ selectedProject()?.name }}
+            </button>
+          }
+        </div>
+        <button class="action-btn logout-btn" (click)="logout()" title="Logout">
+          <span class="icon">⏻</span>
+        </button>
+      } @else {
+        <button class="action-btn login-btn" (click)="openLoginModal()" title="Connect to BCF Server">
+          <span class="icon">🔐</span>
+          <span class="btn-text">Login</span>
+        </button>
+      }
+      <button class="action-btn" title="Settings">
+        <span class="icon">⚙</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Content Area -->
+  <main class="main-content">
+    <!-- BCF Panel -->
+    <aside class="panel bcf-panel"
+           (dragover)="onBcfDragOver($event)"
+           (dragleave)="onBcfDragLeave($event)"
+           (drop)="onBcfDrop($event)"
+           [class.drag-over]="isDraggingBcf">
+      
+      <!-- BCF Panel Header with Actions -->
+      <div class="panel-header">
+        <h2>BCF Issues</h2>
+        @if (useServerBcf() && selectedProject()) {
+          <div class="panel-header-actions">
+            <span class="issue-count" [title]="'Open: ' + openTopicsCount() + ' / Total: ' + totalTopicsCount()">
+              {{ showClosedTopics() ? totalTopicsCount() : openTopicsCount() }}
+            </span>
+          </div>
+        } @else {
+          <span class="issue-count">{{ fileBcfTopics().length }}</span>
+        }
+      </div>
+      
+      <!-- BCF Toolbar (Server Mode) -->
+      @if (useServerBcf() && selectedProject()) {
+        <div class="bcf-toolbar">
+          <button class="toolbar-btn create-btn" (click)="openCreateTopicModal()" title="Create new BCF topic">
+            ➕ New Issue
+          </button>
+          <button class="toolbar-btn toggle-btn" 
+                  [class.active]="showClosedTopics()"
+                  (click)="toggleShowClosed()" 
+                  title="Toggle closed topics">
+            @if (showClosedTopics()) {
+              👁‍🗨 Hide Closed
+            } @else {
+              👁 Show All
+            }
+          </button>
+          <label class="link-color-picker-wrap" title="Link highlight color">
+            <span class="link-color-label">Link color</span>
+            <input
+              type="color"
+              class="link-color-input"
+              [value]="linkHighlightColorHex()"
+              (input)="onLinkHighlightColorChange($any($event.target).value)">
+          </label>
+        </div>
+      }
+
+      <div class="panel-content">
+        <!-- Server BCF Mode -->
+        @if (useServerBcf()) {
+          @if (!selectedProject()) {
+            <div class="empty-state">
+              <span class="empty-icon">📂</span>
+              <p>No project selected</p>
+              <span class="empty-hint">Select a project to view BCF issues</span>
+              @if (projects().length > 0) {
+                <button class="select-project-btn" (click)="openProjectSelector()">
+                  Select Project
+                </button>
+              }
+            </div>
+          } @else if (isLoadingServerBcf() && serverTopics().length === 0) {
+            <div class="loading-indicator">
+              <span class="spinner"></span>
+              Loading BCF topics...
+            </div>
+          } @else if (serverError()) {
+            <div class="error-state">
+              <span class="error-icon">⚠️</span>
+              <p>{{ serverError() }}</p>
+            </div>
+          } @else if (serverTopics().length === 0) {
+            <div class="empty-state">
+              @if (ifcViewerService.selectedIfcGlobalId()) {
+                <span class="empty-icon">🔗</span>
+                <p>No issues link to this object</p>
+                <span class="empty-hint">Clear selection (ESC) to show all issues</span>
+              } @else {
+                <span class="empty-icon">📋</span>
+                <p>No BCF issues</p>
+                <span class="empty-hint">Create a new issue to get started</span>
+              }
+            </div>
+          } @else {
+            @if (ifcViewerService.selectedIfcGlobalId()) {
+              <div class="filter-by-selection-hint">
+                Showing issues linked to selected object. Clear selection (ESC) to show all.
+              </div>
+            }
+            @if (linkFeedbackMessage()) {
+              <div class="link-feedback" [class.link-feedback-error]="linkFeedbackMessage()?.startsWith('Select') || linkFeedbackMessage()?.startsWith('Failed')">
+                {{ linkFeedbackMessage() }}
+              </div>
+            }
+            @if (snapshotFeedbackMessage()) {
+              <div class="link-feedback" [class.link-feedback-error]="snapshotFeedbackMessage()?.startsWith('Could not') || snapshotFeedbackMessage()?.startsWith('Failed')">
+                {{ snapshotFeedbackMessage() }}
+              </div>
+            }
+            @for (topic of serverTopics(); track topic.guid) {
+              <div class="bcf-card" [class.expanded]="isTopicExpanded(topic.guid)">
+                <div class="bcf-card-header" (click)="toggleExpandTopic(topic)">
+                  <span class="bcf-status" [class]="getStatusClass(topic.topic_status)"></span>
+                  <div class="bcf-card-info">
+                    <span class="bcf-title">{{ topic.title }}</span>
+                    <div class="bcf-meta">
+                      @if (topic.priority) {
+                        <span class="bcf-priority" [class]="getPriorityClass(topic.priority)">
+                          {{ topic.priority }}
+                        </span>
+                      }
+                      <span class="bcf-date">{{ formatDate(topic.creation_date) }}</span>
+                    </div>
+                  </div>
+                  <span class="expand-icon">{{ isTopicExpanded(topic.guid) ? '▼' : '▶' }}</span>
+                </div>
+                
+                @if (isTopicExpanded(topic.guid)) {
+                  <div class="bcf-card-body">
+                    @if (topic.description) {
+                      <div class="bcf-description">{{ topic.description }}</div>
+                    }
+                    
+                    <div class="bcf-details">
+                      <div class="detail-row">
+                        <span class="detail-label">Author</span>
+                        <span class="detail-value">{{ topic.creation_author }}</span>
+                      </div>
+                      <div class="detail-row">
+                        <span class="detail-label">Status</span>
+                        <span class="detail-value status-badge" [class]="getStatusClass(topic.topic_status)">
+                          {{ topic.topic_status }}
+                        </span>
+                      </div>
+                      @if (topic.assigned_to) {
+                        <div class="detail-row">
+                          <span class="detail-label">Assigned</span>
+                          <span class="detail-value">{{ topic.assigned_to }}</span>
+                        </div>
+                      }
+                    </div>
+                    
+                    <!-- Snapshots -->
+                    @if (getTopicSnapshotUrls(topic.guid); as urls) {
+                      @if (urls.length > 0) {
+                        <div class="bcf-snapshots">
+                          @for (url of urls; track url) {
+                            <img [src]="url" class="snapshot-thumbnail" alt="Viewpoint snapshot">
+                          }
+                        </div>
+                      }
+                    }
+
+                    <!-- Comments Section -->
+                    <div class="bcf-comments-section">
+                      <div class="comments-header">
+                        <span>Comments ({{ serverComments().length }})</span>
+                      </div>
+                      
+                      @if (serverComments().length > 0) {
+                        <div class="comments-list">
+                          @for (comment of serverComments(); track comment.guid) {
+                            <div class="comment-item">
+                              <div class="comment-header">
+                                <span class="comment-author">{{ comment.author }}</span>
+                                <span class="comment-date">{{ formatDateTime(comment.date) }}</span>
+                              </div>
+                              <div class="comment-text">{{ comment.comment }}</div>
+                            </div>
+                          }
+                        </div>
+                      }
+                      
+                      <!-- Add Comment Form -->
+                      <div class="add-comment-form">
+                        <textarea 
+                          [(ngModel)]="newComment" 
+                          placeholder="Add a comment..."
+                          rows="2"
+                          class="comment-input">
+                        </textarea>
+                        <button 
+                          class="submit-comment-btn" 
+                          (click)="submitComment(topic.guid)"
+                          [disabled]="!newComment.trim()">
+                          Send
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <!-- Actions -->
+                    <div class="bcf-card-actions">
+                      <button
+                        class="link-to-model-btn"
+                        type="button"
+                        [title]="ifcViewerService.selectedIfcGlobalId() ? 'Link selected IFC object(s) to this topic (saved in viewpoint)' : 'Select an IFC object in the model first'"
+                        [disabled]="!ifcViewerService.selectedIfcGlobalId()"
+                        (click)="highlightTopicLink(topic); $event.stopPropagation()">
+                        🔗 Link to model
+                      </button>
+                      <button
+                        class="show-in-model-btn"
+                        type="button"
+                        title="Highlight linked objects in model (read-only)"
+                        (click)="showTopicLinkInModel(topic); $event.stopPropagation()">
+                        Show in model
+                      </button>
+                      <button
+                        class="capture-snapshot-btn"
+                        type="button"
+                        title="Capture current viewer as snapshot"
+                        (click)="captureAndPostSnapshot(topic); $event.stopPropagation()">
+                        📷 Capture Snapshot
+                      </button>
+                      @if (!topic.topic_status.toLowerCase().includes('closed')) {
+                        <button class="close-topic-btn" (click)="closeServerTopic(topic, $event)">
+                          ✓ Close Issue
+                        </button>
+                      }
+                    </div>
+                  </div>
+                }
+              </div>
+            }
+          }
+        } @else {
+          <!-- File BCF Mode -->
+          @if (isLoadingFileBcf()) {
+            <div class="loading-indicator">
+              <span class="spinner"></span>
+              Loading BCF...
+            </div>
+          } @else if (fileBcfTopics().length === 0) {
+            <div class="empty-state">
+              <span class="empty-icon">📋</span>
+              <p>No BCF issues loaded</p>
+              <span class="empty-hint">Drop a .bcf file here or use the header button</span>
+              @if (!isAuthenticated()) {
+                <div class="login-prompt">
+                  <span>— or —</span>
+                  <button class="login-prompt-btn" (click)="openLoginModal()">
+                    Connect to BCF Server
+                  </button>
+                </div>
+              }
+            </div>
+          } @else {
+            @for (topic of fileBcfTopics(); track topic.guid) {
+              <div class="bcf-item" 
+                   [class.selected]="selectedFileTopic()?.guid === topic.guid"
+                   (click)="selectFileTopic(topic)">
+                <span class="bcf-status" [class]="getStatusClass(topic.status)"></span>
+                <div class="bcf-info">
+                  <span class="bcf-title">{{ topic.title }}</span>
+                  @if (topic.priority) {
+                    <span class="bcf-priority" [class]="topic.priority.toLowerCase()">
+                      {{ topic.priority }}
+                    </span>
+                  }
+                </div>
+              </div>
+            }
+          }
+        }
+      </div>
+    </aside>
+
+    <!-- Model Viewer Area - 50% width, 90% height -->
+    <section class="panel model-viewer-panel">
+      <div class="panel-header">
+        <h2>Model Viewer</h2>
+      </div>
+      <div class="model-viewer-content">
+        <iframe
+          #ifcViewerFrame
+          [src]="ifcViewerUrl"
+          title="IFC Model Viewer"
+          class="ifc-viewer-iframe"
+          allow="cross-origin-isolated">
+        </iframe>
+      </div>
+    </section>
+
+    <!-- Right Column: Topic Details / IFC Properties -->
+    <div class="right-column">
+      <!-- Property Panel -->
+      <aside class="panel property-panel">
+        <div class="panel-header">
+          <h2>{{ (ifcViewerService.selectedIfcExpressId() != null || (linkedHighlightGlobalIds().length === 1 && ifcViewerService.ifcProperties())) ? 'IFC Properties' : 'Topic Details' }}</h2>
+          @if (selectedServerTopic() || selectedFileTopic() || ifcViewerService.selectedIfcExpressId() != null || linkedHighlightGlobalIds().length > 0) {
+            <button class="clear-selection-btn" (click)="clearAllSelections()" title="Clear selection (ESC)">
+              ✕
+            </button>
+          }
+        </div>
+        <div class="panel-content">
+          @if ((ifcViewerService.selectedIfcExpressId() != null || linkedHighlightGlobalIds().length === 1) && ifcViewerService.ifcProperties(); as props) {
+            <!-- IFC element properties (from click selection or single linked topic object) -->
+            @if (linkedHighlightGlobalIds().length === 1 && ifcViewerService.selectedIfcExpressId() == null) {
+              <p class="linked-object-hint">Linked object</p>
+            }
+            @if (props['Name']) {
+              <div class="property-group">
+                <h3 class="property-group-title">Type</h3>
+                <div class="property-row">
+                  <span class="property-label">Name</span>
+                  <span class="property-value">{{ props['Name'] }}</span>
+                </div>
+                @if (props['GlobalId']) {
+                  <div class="property-row">
+                    <span class="property-label">GlobalId</span>
+                    <span class="property-value">{{ props['GlobalId'] }}</span>
+                  </div>
+                }
+              </div>
+            }
+            @for (key of objectKeys(props); track key) {
+              @if (key !== 'Name' && key !== 'GlobalId' && isPsetValue(props[key])) {
+                <div class="property-group">
+                  <h3 class="property-group-title">{{ key }}</h3>
+                  @for (row of objectEntries(props[key]); track row[0]) {
+                    <div class="property-row">
+                      <span class="property-label">{{ row[0] }}</span>
+                      <span class="property-value">{{ formatPropertyValue(row[1]) }}</span>
+                    </div>
+                  }
+                </div>
+              }
+            }
+          } @else if (selectedServerTopic(); as topic) {
+            <!-- Show server BCF topic details -->
+            <div class="property-group">
+              <h3 class="property-group-title">Topic Info</h3>
+              <div class="property-row">
+                <span class="property-label">Title</span>
+                <span class="property-value">{{ topic.title }}</span>
+              </div>
+              <div class="property-row">
+                <span class="property-label">Status</span>
+                <span class="property-value status-badge" [class]="getStatusClass(topic.topic_status)">
+                  {{ topic.topic_status }}
+                </span>
+              </div>
+              @if (topic.priority) {
+                <div class="property-row">
+                  <span class="property-label">Priority</span>
+                  <span class="property-value">{{ topic.priority }}</span>
+                </div>
+              }
+              @if (topic.creation_author) {
+                <div class="property-row">
+                  <span class="property-label">Author</span>
+                  <span class="property-value">{{ topic.creation_author }}</span>
+                </div>
+              }
+              @if (topic.assigned_to) {
+                <div class="property-row">
+                  <span class="property-label">Assigned To</span>
+                  <span class="property-value">{{ topic.assigned_to }}</span>
+                </div>
+              }
+              <div class="property-row">
+                <span class="property-label">Created</span>
+                <span class="property-value">{{ formatDate(topic.creation_date) }}</span>
+              </div>
+            </div>
+            @if (topic.description) {
+              <div class="property-group">
+                <h3 class="property-group-title">Description</h3>
+                <div class="description-text">{{ topic.description }}</div>
+              </div>
+            }
+          } @else if (selectedFileTopic(); as topic) {
+            <!-- Show file BCF topic details -->
+            <div class="property-group">
+              <h3 class="property-group-title">Topic Info</h3>
+              <div class="property-row">
+                <span class="property-label">Title</span>
+                <span class="property-value">{{ topic.title }}</span>
+              </div>
+              <div class="property-row">
+                <span class="property-label">Status</span>
+                <span class="property-value status-badge" [class]="getStatusClass(topic.status)">
+                  {{ topic.status }}
+                </span>
+              </div>
+              @if (topic.priority) {
+                <div class="property-row">
+                  <span class="property-label">Priority</span>
+                  <span class="property-value">{{ topic.priority }}</span>
+                </div>
+              }
+              @if (topic.author) {
+                <div class="property-row">
+                  <span class="property-label">Author</span>
+                  <span class="property-value">{{ topic.author }}</span>
+                </div>
+              }
+              @if (topic.assignedTo) {
+                <div class="property-row">
+                  <span class="property-label">Assigned To</span>
+                  <span class="property-value">{{ topic.assignedTo }}</span>
+                </div>
+              }
+            </div>
+            @if (topic.description) {
+              <div class="property-group">
+                <h3 class="property-group-title">Description</h3>
+                <div class="description-text">{{ topic.description }}</div>
+              </div>
+            }
+            @if (topic.comments.length > 0) {
+              <div class="property-group">
+                <h3 class="property-group-title">Comments ({{ topic.comments.length }})</h3>
+                @for (comment of topic.comments; track comment.guid) {
+                  <div class="comment-item">
+                    <div class="comment-header">
+                      <span class="comment-author">{{ comment.author }}</span>
+                      <span class="comment-date">{{ comment.date | date:'short' }}</span>
+                    </div>
+                    <div class="comment-text">{{ comment.comment }}</div>
+                  </div>
+                }
+              </div>
+            }
+          } @else {
+            <div class="empty-state">
+              <span class="empty-icon">📋</span>
+              <p>No selection</p>
+              <span class="empty-hint">Select a BCF topic or an IFC element to view details</span>
+              <span class="empty-hint keyboard-hint">Press <kbd>ESC</kbd> to clear selection</span>
+            </div>
+          }
+        </div>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<!-- Login Modal -->
+@if (showLoginModal()) {
+  <div class="modal-overlay" (click)="closeLoginModal()">
+    <div class="modal login-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Connect to BCF Server</h3>
+        <button class="modal-close" (click)="closeLoginModal()">×</button>
+      </div>
+      <div class="modal-body">
+        @if (loginError()) {
+          <div class="error-message">{{ loginError() }}</div>
+        }
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input 
+            type="text" 
+            id="username" 
+            [(ngModel)]="loginUsername" 
+            placeholder="Enter username"
+            (keyup.enter)="submitLogin()"
+            autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input 
+            type="password" 
+            id="password" 
+            [(ngModel)]="loginPassword" 
+            placeholder="Enter password"
+            (keyup.enter)="submitLogin()"
+            autocomplete="current-password">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" (click)="closeLoginModal()">Cancel</button>
+        <button class="btn btn-primary" (click)="submitLogin()" [disabled]="isLoggingIn() || !loginUsername || !loginPassword">
+          @if (isLoggingIn()) {
+            <span class="spinner small"></span> Connecting...
+          } @else {
+            Connect
+          }
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Project Selector Modal -->
+@if (showProjectSelector()) {
+  <div class="modal-overlay" (click)="closeProjectSelector()">
+    <div class="modal project-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Select Project</h3>
+        <button class="modal-close" (click)="closeProjectSelector()">×</button>
+      </div>
+      <div class="modal-body">
+        @if (projects().length === 0) {
+          <div class="loading-indicator">
+            <span class="spinner"></span>
+            Loading projects...
+          </div>
+        } @else {
+          <div class="project-list">
+            @for (project of projects(); track project.project_id) {
+              <div class="project-item" 
+                   [class.selected]="selectedProject()?.project_id === project.project_id"
+                   (click)="selectProject(project)">
+                <div class="project-info">
+                  <span class="project-name">{{ project.name }}</span>
+                  @if (project.description) {
+                    <span class="project-desc">{{ project.description }}</span>
+                  }
+                </div>
+                <span class="project-id">ID: {{ project.project_id }}</span>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Create Topic Modal -->
+@if (showCreateTopicModal()) {
+  <div class="modal-overlay" (click)="closeCreateTopicModal()">
+    <div class="modal create-topic-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Create New BCF Issue</h3>
+        <button class="modal-close" (click)="closeCreateTopicModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="topicTitle">Title *</label>
+          <input 
+            type="text" 
+            id="topicTitle" 
+            [(ngModel)]="newTopicTitle" 
+            placeholder="Enter issue title"
+            (keyup.enter)="createTopic()">
+        </div>
+        <div class="form-group">
+          <label for="topicDesc">Description</label>
+          <textarea 
+            id="topicDesc" 
+            [(ngModel)]="newTopicDescription" 
+            placeholder="Enter description (optional)"
+            rows="3">
+          </textarea>
+        </div>
+        <div class="form-group">
+          <label for="topicPriority">Priority</label>
+          <select id="topicPriority" [(ngModel)]="newTopicPriority">
+            <option value="Low">Low</option>
+            <option value="Normal">Normal</option>
+            <option value="High">High</option>
+            <option value="Critical">Critical</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" (click)="closeCreateTopicModal()">Cancel</button>
+        <button class="btn btn-primary" (click)="createTopic()" [disabled]="!newTopicTitle.trim()">
+          Create Issue
+        </button>
+      </div>
+    </div>
+  </div>
+}
