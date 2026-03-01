@@ -134,4 +134,4 @@ For production, set `ifcViewerUrl` to your deployed viewer URL and use `frontend
 
 ## License
 
-Private / see repository settings.
+Private
