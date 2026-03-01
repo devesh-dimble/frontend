@@ -18,6 +18,10 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
   
   @HostListener('document:keydown.escape')
   onEscapeKey(): void {
+    if (this.enlargedSnapshotUrl()) {
+      this.closeSnapshotLightbox();
+      return;
+    }
     this.clearAllSelections();
   }
 
@@ -63,6 +67,8 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
   private topicSnapshotCache = new Map<string, Map<string, string>>();
   /** Signal that triggers re-reads of snapshot URLs in the template. */
   protected topicSnapshotVersion = signal(0);
+  /** URL of snapshot currently shown in lightbox, or null if closed. */
+  protected enlargedSnapshotUrl = signal<string | null>(null);
 
   // IFC Viewer
   protected ifcViewerUrl = this.ifcViewerService.viewerUrl;
@@ -459,6 +465,54 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
     void this.topicSnapshotVersion();
     const cache = this.topicSnapshotCache.get(topicGuid);
     return cache ? Array.from(cache.values()) : [];
+  }
+
+  /** Open the snapshot lightbox with the given image URL. */
+  openSnapshotLightbox(url: string): void {
+    this.enlargedSnapshotUrl.set(url);
+  }
+
+  /** Close the snapshot lightbox. */
+  closeSnapshotLightbox(): void {
+    this.enlargedSnapshotUrl.set(null);
+  }
+
+  /** Open file picker and upload selected image as a BCF viewpoint snapshot for the topic. */
+  uploadSnapshotFromFile(topic: BcfApiTopic): void {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/png,image/jpeg,image/jpg';
+    input.style.display = 'none';
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      input.remove();
+      if (!file) return;
+      const snapshotType = file.type === 'image/png' ? 'png' : 'jpg';
+      const reader = new FileReader();
+      reader.addEventListener('load', async () => {
+        const dataUrl = reader.result as string;
+        const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : '';
+        if (!base64) {
+          this.snapshotFeedbackMessage.set('Could not read image');
+          setTimeout(() => this.snapshotFeedbackMessage.set(null), 3000);
+          return;
+        }
+        this.snapshotFeedbackMessage.set(null);
+        const result = await this.bcfApiService.createViewpoint(topic.guid, {
+          snapshot: { snapshot_type: snapshotType, snapshot_data: base64 },
+        });
+        if (result) {
+          this.snapshotFeedbackMessage.set('Image uploaded');
+          this.loadTopicSnapshots(topic.guid);
+        } else {
+          this.snapshotFeedbackMessage.set('Failed to upload image');
+        }
+        setTimeout(() => this.snapshotFeedbackMessage.set(null), 3000);
+      });
+      reader.readAsDataURL(file);
+    });
+    document.body.appendChild(input);
+    input.click();
   }
 
   /** Revoke Object URLs for a single topic. */

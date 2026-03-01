@@ -181,7 +181,8 @@
                       @if (urls.length > 0) {
                         <div class="bcf-snapshots">
                           @for (url of urls; track url) {
-                            <img [src]="url" class="snapshot-thumbnail" alt="Viewpoint snapshot">
+                            <img [src]="url" class="snapshot-thumbnail" alt="Viewpoint snapshot"
+                                 (click)="openSnapshotLightbox(url); $event.stopPropagation()">
                           }
                         </div>
                       }
@@ -247,6 +248,13 @@
                         title="Capture current viewer as snapshot"
                         (click)="captureAndPostSnapshot(topic); $event.stopPropagation()">
                         📷 Capture Snapshot
+                      </button>
+                      <button
+                        class="upload-snapshot-btn"
+                        type="button"
+                        title="Upload an image from your computer as snapshot"
+                        (click)="uploadSnapshotFromFile(topic); $event.stopPropagation()">
+                        📤 Upload image
                       </button>
                       @if (!topic.topic_status.toLowerCase().includes('closed')) {
                         <button class="close-topic-btn" (click)="closeServerTopic(topic, $event)">
@@ -472,6 +480,14 @@
     </div>
   </main>
 </div>
+
+<!-- Snapshot lightbox (enlarge image) -->
+@if (enlargedSnapshotUrl(); as url) {
+  <div class="snapshot-lightbox-overlay" (click)="closeSnapshotLightbox()">
+    <img [src]="url" class="snapshot-lightbox-image" alt="Viewpoint snapshot" (click)="$event.stopPropagation()">
+    <button type="button" class="snapshot-lightbox-close" (click)="closeSnapshotLightbox()" title="Close">×</button>
+  </div>
+}
 
 <!-- Login Modal -->
 @if (showLoginModal()) {
